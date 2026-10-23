@@ -1,0 +1,6 @@
+{
+  "name": "Toko Yoga",
+  "description": "Aplikasi profil ekstrusi aluminium 3D, manajemen inventaris, kasir POS & kalkulator optimasi potongan bahan offline",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
