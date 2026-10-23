@@ -22,7 +22,25 @@ data class AssemblyPart(
     val rotYaw: Float = 0f,   // Derajat putar sumbu Y
     val rotRoll: Float = 0f,  // Derajat putar sumbu Z
     val color: String = "Silver",
-    val isVisible: Boolean = true
+    val isVisible: Boolean = true,
+    val groupId: String? = null,
+    val groupName: String? = null,
+    val jointType: String = "90_butt" // "90_butt", "45_miter", "flush"
+)
+
+data class AssemblyBounds(
+    val minX: Float,
+    val maxX: Float,
+    val minY: Float,
+    val maxY: Float,
+    val minZ: Float,
+    val maxZ: Float,
+    val widthMm: Float,
+    val heightMm: Float,
+    val depthMm: Float,
+    val totalMaterialLengthMm: Double,
+    val totalPieces: Int,
+    val estimatedWeightKg: Double
 )
 
 data class AssemblySceneMesh(
@@ -39,9 +57,10 @@ object AssemblyEngine {
 
     /**
      * Membangun mesh gabungan multi-objek untuk seluruh rangkaian rangka aluminium.
-     * Menerapkan transformasi rotasi 3D (Euler angles) dan translasi posisi independen tiap part.
+     * Menerapkan transformasi rotasi 3D (Euler angles), translasi posisi independen,
+     * serta exploded view simulation opsional.
      */
-    fun buildAssemblyMesh(parts: List<AssemblyPart>): AssemblySceneMesh {
+    fun buildAssemblyMesh(parts: List<AssemblyPart>, explodedFactor: Float = 0f): AssemblySceneMesh {
         val visibleParts = parts.filter { it.isVisible }
         if (visibleParts.isEmpty()) {
             return AssemblySceneMesh(
@@ -60,8 +79,16 @@ object AssemblyEngine {
         val allIndices = mutableListOf<Int>()
         var totalMaterialLength = 0.0
 
+        val avgX = if (visibleParts.isNotEmpty()) visibleParts.map { it.posX }.average().toFloat() else 0f
+        val avgY = if (visibleParts.isNotEmpty()) visibleParts.map { it.posY }.average().toFloat() else 0f
+        val avgZ = if (visibleParts.isNotEmpty()) visibleParts.map { it.posZ }.average().toFloat() else 0f
+
         for (part in visibleParts) {
             totalMaterialLength += part.lengthMm.toDouble()
+
+            val explodeOffsetX = if (explodedFactor > 0f) (part.posX - avgX) * explodedFactor * 0.45f else 0f
+            val explodeOffsetY = if (explodedFactor > 0f) (part.posY - avgY) * explodedFactor * 0.45f else 0f
+            val explodeOffsetZ = if (explodedFactor > 0f) (part.posZ - avgZ) * explodedFactor * 0.45f else 0f
 
             // 1. Dapatkan kontur 2D dasar penampang profil
             val contour2D = HollowExtruder.getPresetProfile(
@@ -105,11 +132,11 @@ object AssemblyEngine {
                 var z3 = -x2 * sinY + z2 * cosY
                 var y3 = y2
 
-                // Translasi Posisi
+                // Translasi Posisi (dengan exploded view offset bila diaktifkan)
                 return Vertex3D(
-                    x = x3 + part.posX,
-                    y = y3 + part.posY,
-                    z = z3 + part.posZ
+                    x = x3 + part.posX + explodeOffsetX,
+                    y = y3 + part.posY + explodeOffsetY,
+                    z = z3 + part.posZ + explodeOffsetZ
                 )
             }
 
@@ -356,5 +383,173 @@ object AssemblyEngine {
             e.printStackTrace()
             ""
         }
+    }
+
+    /**
+     * Preset Rangka Partisi Kaca Aluminium (6 Batang)
+     */
+    fun createPartisiKacaPreset(lebarMm: Float = 1200f, tinggiMm: Float = 2400f): List<AssemblyPart> {
+        val profile = "Shop Front Open Back"
+        val profileSize = 45f
+        val thickness = 1.35f
+        val setengahLebar = lebarMm / 2f
+        val tinggiTransom = 900f
+
+        return listOf(
+            AssemblyPart(name = "Tiang Kiri Partisi", profileType = profile, lengthMm = tinggiMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = 0f, posZ = 0f, rotPitch = 90f, color = "Black"),
+            AssemblyPart(name = "Tiang Tengah (Mullion)", profileType = profile, lengthMm = tinggiMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = setengahLebar, posY = 0f, posZ = 0f, rotPitch = 90f, color = "Black"),
+            AssemblyPart(name = "Tiang Kanan Partisi", profileType = profile, lengthMm = tinggiMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = lebarMm, posY = 0f, posZ = 0f, rotPitch = 90f, color = "Black"),
+            AssemblyPart(name = "Ambang Bawah Partisi", profileType = profile, lengthMm = lebarMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = 0f, posZ = 0f, rotYaw = 90f, color = "Black"),
+            AssemblyPart(name = "Ambang Atas Partisi", profileType = profile, lengthMm = lebarMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = tinggiMm, posZ = 0f, rotYaw = 90f, color = "Black"),
+            AssemblyPart(name = "Ambang Tengah (Transom)", profileType = profile, lengthMm = lebarMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = tinggiTransom, posZ = 0f, rotYaw = 90f, color = "Black")
+        )
+    }
+
+    /**
+     * Preset Etalase Kaca Aluminium (12 Batang)
+     */
+    fun createEtalaseAluminiumPreset(panjangMm: Float = 1200f, lebarMm: Float = 500f, tinggiMm: Float = 900f): List<AssemblyPart> {
+        val profile = "Hollow Box"
+        val profileSize = 35f
+        val thickness = 1.25f
+
+        return listOf(
+            // 4 Tiang Sudut
+            AssemblyPart(name = "Tiang Depan Kiri", lengthMm = tinggiMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = 0f, posZ = 0f, rotPitch = 90f, color = "Silver"),
+            AssemblyPart(name = "Tiang Depan Kanan", lengthMm = tinggiMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = panjangMm, posY = 0f, posZ = 0f, rotPitch = 90f, color = "Silver"),
+            AssemblyPart(name = "Tiang Belakang Kiri", lengthMm = tinggiMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = 0f, posZ = lebarMm, rotPitch = 90f, color = "Silver"),
+            AssemblyPart(name = "Tiang Belakang Kanan", lengthMm = tinggiMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = panjangMm, posY = 0f, posZ = lebarMm, rotPitch = 90f, color = "Silver"),
+            // 4 Frame Bawah
+            AssemblyPart(name = "Frame Bawah Depan", lengthMm = panjangMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = 0f, posZ = 0f, rotYaw = 90f, color = "Silver"),
+            AssemblyPart(name = "Frame Bawah Belakang", lengthMm = panjangMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = 0f, posZ = lebarMm, rotYaw = 90f, color = "Silver"),
+            AssemblyPart(name = "Frame Bawah Samping Kiri", lengthMm = lebarMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = 0f, posZ = 0f, rotPitch = 0f, color = "Silver"),
+            AssemblyPart(name = "Frame Bawah Samping Kanan", lengthMm = lebarMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = panjangMm, posY = 0f, posZ = 0f, rotPitch = 0f, color = "Silver"),
+            // 4 Frame Atas
+            AssemblyPart(name = "Frame Atas Depan", lengthMm = panjangMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = tinggiMm, posZ = 0f, rotYaw = 90f, color = "Silver"),
+            AssemblyPart(name = "Frame Atas Belakang", lengthMm = panjangMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = tinggiMm, posZ = lebarMm, rotYaw = 90f, color = "Silver"),
+            AssemblyPart(name = "Frame Atas Samping Kiri", lengthMm = lebarMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = 0f, posY = tinggiMm, posZ = 0f, rotPitch = 0f, color = "Silver"),
+            AssemblyPart(name = "Frame Atas Samping Kanan", lengthMm = lebarMm, widthMm = profileSize, heightMm = profileSize, thicknessMm = thickness, posX = panjangMm, posY = tinggiMm, posZ = 0f, rotPitch = 0f, color = "Silver")
+        )
+    }
+
+    /**
+     * Menggabungkan (Assembling) beberapa part terpilih atau semua part menjadi satu kesatuan unit.
+     */
+    fun assemblePartsIntoOne(
+        parts: List<AssemblyPart>,
+        unitName: String,
+        targetIds: Set<String>? = null,
+        jointType: String = "90_butt"
+    ): List<AssemblyPart> {
+        val newGroupId = "UNIT-" + UUID.randomUUID().toString().take(8).uppercase()
+        val isTargetAll = targetIds == null || targetIds.isEmpty()
+
+        return parts.map { part ->
+            if (isTargetAll || targetIds?.contains(part.id) == true) {
+                part.copy(
+                    groupId = newGroupId,
+                    groupName = unitName.ifBlank { "Unit Perakitan #1" },
+                    jointType = jointType
+                )
+            } else {
+                part
+            }
+        }
+    }
+
+    /**
+     * Memisahkan (Ungroup / Disassemble) unit rakitan kembali menjadi potongan batang lepas.
+     */
+    fun disassembleGroup(parts: List<AssemblyPart>, groupId: String): List<AssemblyPart> {
+        return parts.map { part ->
+            if (part.groupId == groupId) {
+                part.copy(groupId = null, groupName = null)
+            } else {
+                part
+            }
+        }
+    }
+
+    /**
+     * Menggeser seluruh komponen dalam satu unit rakitan secara serentak (rigid group translation).
+     */
+    fun moveAssembledGroup(
+        parts: List<AssemblyPart>,
+        groupId: String,
+        deltaX: Float,
+        deltaY: Float,
+        deltaZ: Float
+    ): List<AssemblyPart> {
+        return parts.map { part ->
+            if (part.groupId == groupId) {
+                part.copy(
+                    posX = part.posX + deltaX,
+                    posY = part.posY + deltaY,
+                    posZ = part.posZ + deltaZ
+                )
+            } else {
+                part
+            }
+        }
+    }
+
+    /**
+     * Menghitung batas dimensi (bounding box) dan spesifikasi teknik dari unit perakitan.
+     */
+    fun calculateAssemblyBounds(parts: List<AssemblyPart>): AssemblyBounds {
+        val visible = parts.filter { it.isVisible }
+        if (visible.isEmpty()) {
+            return AssemblyBounds(
+                minX = 0f, maxX = 0f,
+                minY = 0f, maxY = 0f,
+                minZ = 0f, maxZ = 0f,
+                widthMm = 0f, heightMm = 0f, depthMm = 0f,
+                totalMaterialLengthMm = 0.0,
+                totalPieces = 0,
+                estimatedWeightKg = 0.0
+            )
+        }
+
+        var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
+        var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+        var minZ = Float.MAX_VALUE; var maxZ = -Float.MAX_VALUE
+        var totalLengthMm = 0.0
+
+        for (p in visible) {
+            totalLengthMm += p.lengthMm.toDouble()
+            val len = p.lengthMm
+            val w = p.widthMm
+            val h = p.heightMm
+
+            val endX = p.posX + if (p.rotYaw == 90f || p.rotYaw == -90f) len else w
+            val endY = p.posY + if (p.rotPitch == 90f || p.rotPitch == -90f) len else h
+            val endZ = p.posZ + if (p.rotPitch == 0f && p.rotYaw == 0f && p.rotRoll == 0f) len else w
+
+            minX = minOf(minX, p.posX, endX)
+            maxX = maxOf(maxX, p.posX, endX)
+
+            minY = minOf(minY, p.posY, endY)
+            maxY = maxOf(maxY, p.posY, endY)
+
+            minZ = minOf(minZ, p.posZ, endZ)
+            maxZ = maxOf(maxZ, p.posZ, endZ)
+        }
+
+        val width = (maxX - minX).coerceAtLeast(0f)
+        val height = (maxY - minY).coerceAtLeast(0f)
+        val depth = (maxZ - minZ).coerceAtLeast(0f)
+        val estWeightKg = (totalLengthMm / 1000.0) * 1.15
+
+        return AssemblyBounds(
+            minX = minX, maxX = maxX,
+            minY = minY, maxY = maxY,
+            minZ = minZ, maxZ = maxZ,
+            widthMm = width,
+            heightMm = height,
+            depthMm = depth,
+            totalMaterialLengthMm = totalLengthMm,
+            totalPieces = visible.size,
+            estimatedWeightKg = estWeightKg
+        )
     }
 }

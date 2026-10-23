@@ -46,7 +46,9 @@ fun Studio3DScreen(
     repository: TokoYogaRepository? = null,
     onSendToPOS: ((List<AssemblyPart>) -> Unit)? = null,
     incomingCustomPart: AssemblyPart? = null,
-    onCustomPartHandled: (() -> Unit)? = null
+    onCustomPartHandled: (() -> Unit)? = null,
+    incomingAssemblyList: List<AssemblyPart>? = null,
+    onNavigateToAssembly: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -64,6 +66,14 @@ fun Studio3DScreen(
             assemblyParts.add(incomingCustomPart)
             Toast.makeText(context, "Profil kustom ${incomingCustomPart.name} ditambahkan ke Studio 3D!", Toast.LENGTH_SHORT).show()
             onCustomPartHandled?.invoke()
+        }
+    }
+
+    LaunchedEffect(incomingAssemblyList) {
+        if (!incomingAssemblyList.isNullOrEmpty()) {
+            assemblyParts.clear()
+            assemblyParts.addAll(incomingAssemblyList)
+            Toast.makeText(context, "Unit rakitan (${incomingAssemblyList.size} batang) dimuat di 3D Studio!", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -262,6 +272,40 @@ fun Studio3DScreen(
                             Icon(Icons.Default.BookmarkAdd, contentDescription = "Simpan Draft", tint = Color(0xFFF59E0B), modifier = Modifier.size(16.dp))
                         }
 
+                        // Tombol Menu Assembling Parts into One
+                        IconButton(
+                            onClick = {
+                                if (onNavigateToAssembly != null) {
+                                    onNavigateToAssembly()
+                                } else {
+                                    val isCurrentlyAssembled = assemblyParts.any { it.groupId != null }
+                                    if (!isCurrentlyAssembled) {
+                                        val assembled = AssemblyEngine.assemblePartsIntoOne(
+                                            assemblyParts.toList(),
+                                            "Unit Rakitan 3D"
+                                        )
+                                        assemblyParts.clear()
+                                        assemblyParts.addAll(assembled)
+                                        Toast.makeText(context, "Seluruh batang digabung menjadi 1 Unit!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val firstGroup = assemblyParts.firstOrNull { it.groupId != null }?.groupId
+                                        if (firstGroup != null) {
+                                            val disassembled = AssemblyEngine.disassembleGroup(assemblyParts.toList(), firstGroup)
+                                            assemblyParts.clear()
+                                            assemblyParts.addAll(disassembled)
+                                            Toast.makeText(context, "Unit rakitan dipisahkan kembali!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFF0369A1), CircleShape)
+                                .testTag("btn_menu_assembly_studio")
+                        ) {
+                            Icon(Icons.Default.Build, contentDescription = "Menu Assembling Parts", tint = Color.White, modifier = Modifier.size(16.dp))
+                        }
+
                         // Tombol Tambah Batang (+)
                         IconButton(
                             onClick = { showAddPartDialog = true },
@@ -355,6 +399,73 @@ fun Studio3DScreen(
                 }
 
                 Spacer(Modifier.height(8.dp))
+
+                // Banner / Aksi Assembling Parts into One Unit
+                val hasAssemblyGroup = assemblyParts.any { it.groupId != null }
+                val assembledGroupName = assemblyParts.firstOrNull { it.groupName != null }?.groupName ?: "Unit Rakitan"
+                Surface(
+                    color = if (hasAssemblyGroup) Color(0xFF064E3B) else Color(0xFF1E293B),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        if (onNavigateToAssembly != null) {
+                            onNavigateToAssembly()
+                        } else {
+                            if (!hasAssemblyGroup) {
+                                val assembled = AssemblyEngine.assemblePartsIntoOne(
+                                    assemblyParts.toList(),
+                                    "Unit Kusen 3D"
+                                )
+                                assemblyParts.clear()
+                                assemblyParts.addAll(assembled)
+                                Toast.makeText(context, "Seluruh batang dirakit menjadi 1 Unit!", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }.testTag("strip_assembly_studio")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                Icons.Default.Build,
+                                contentDescription = null,
+                                tint = if (hasAssemblyGroup) Color(0xFF34D399) else Color(0xFFF59E0B),
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                if (hasAssemblyGroup) "Unit: $assembledGroupName" else "Rakit ${assemblyParts.size} Batang Jadi 1 Unit",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (hasAssemblyGroup) Color(0xFFA7F3D0) else Color(0xFFFCD34D),
+                                maxLines = 1
+                            )
+                        }
+
+                        if (hasAssemblyGroup) {
+                            TextButton(
+                                onClick = {
+                                    val firstGroup = assemblyParts.firstOrNull { it.groupId != null }?.groupId
+                                    if (firstGroup != null) {
+                                        val disassembled = AssemblyEngine.disassembleGroup(assemblyParts.toList(), firstGroup)
+                                        assemblyParts.clear()
+                                        assemblyParts.addAll(disassembled)
+                                    }
+                                },
+                                contentPadding = PaddingValues(0.dp),
+                                modifier = Modifier.height(20.dp)
+                            ) {
+                                Text("Pisahkan", fontSize = 9.5.sp, color = Color(0xFFEF4444))
+                            }
+                        } else {
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(6.dp))
 
                 // Daftar Hirarki Objek Batang
                 LazyColumn(

@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
     object Studio3D : Screen("studio_3d", "3D Studio", Icons.Default.ViewInAr)
+    object Assembly : Screen("assembly", "Perakitan", Icons.Default.Build)
     object ProfileCanvas : Screen("profile_canvas", "Profil 2D", Icons.Default.Draw)
     object POS : Screen("pos", "Kasir POS", Icons.Default.PointOfSale)
     object Katalog : Screen("katalog", "Katalog", Icons.Default.Inventory2)
@@ -102,6 +103,7 @@ fun TokoYogaApp(repository: TokoYogaRepository) {
                 val navItems = listOf(
                     Screen.Dashboard,
                     Screen.Studio3D,
+                    Screen.Assembly,
                     Screen.ProfileCanvas,
                     Screen.POS,
                     Screen.Katalog,
@@ -151,7 +153,25 @@ fun TokoYogaApp(repository: TokoYogaRepository) {
                                 currentScreen = Screen.POS
                             },
                             incomingCustomPart = pendingCustomPart,
-                            onCustomPartHandled = { pendingCustomPart = null }
+                            onCustomPartHandled = { pendingCustomPart = null },
+                            incomingAssemblyList = pendingAssemblyParts,
+                            onNavigateToAssembly = { currentScreen = Screen.Assembly }
+                        )
+                    }
+                    Screen.Assembly -> {
+                        AssemblyStudioScreen(
+                            repository = repository,
+                            onNavigateToStudio = { parts ->
+                                pendingAssemblyParts = parts
+                                currentScreen = Screen.Studio3D
+                            },
+                            onNavigateToPOS = { parts ->
+                                pendingAssemblyParts = parts
+                                currentScreen = Screen.POS
+                            },
+                            onNavigateBack = {
+                                currentScreen = Screen.Studio3D
+                            }
                         )
                     }
                     Screen.ProfileCanvas -> {

@@ -24,6 +24,9 @@ object AssemblySerializer {
                 put("rotRoll", p.rotRoll.toDouble())
                 put("color", p.color)
                 put("isVisible", p.isVisible)
+                if (p.groupId != null) put("groupId", p.groupId)
+                if (p.groupName != null) put("groupName", p.groupName)
+                put("jointType", p.jointType)
             }
             array.put(obj)
         }
@@ -53,7 +56,10 @@ object AssemblySerializer {
                         rotYaw = obj.optDouble("rotYaw", 0.0).toFloat(),
                         rotRoll = obj.optDouble("rotRoll", 0.0).toFloat(),
                         color = obj.optString("color", "Silver"),
-                        isVisible = obj.optBoolean("isVisible", true)
+                        isVisible = obj.optBoolean("isVisible", true),
+                        groupId = if (obj.has("groupId")) obj.optString("groupId") else null,
+                        groupName = if (obj.has("groupName")) obj.optString("groupName") else null,
+                        jointType = obj.optString("jointType", "90_butt")
                     )
                 )
             }
